@@ -1,4 +1,6 @@
-use enigo::{Enigo, Key, Keyboard, Mouse, Settings};
+use enigo::{Enigo, Mouse, Settings};
+#[cfg(target_os = "macos")]
+use enigo::{Key, Keyboard};
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
 
@@ -22,15 +24,11 @@ pub fn get_cursor_position(app_handle: &AppHandle) -> Option<(i32, i32)> {
     enigo.location().ok()
 }
 
-/// Sends a Ctrl/Cmd+C copy command using platform-specific virtual key codes.
-/// This is used as a fallback when direct selected-text APIs are unavailable.
+/// Sends a Cmd+C copy command using macOS virtual key codes.
+/// This is used as a fallback when the Accessibility API cannot read the selection.
+#[cfg(target_os = "macos")]
 pub fn send_copy_ctrl_c(enigo: &mut Enigo) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
     let (modifier_key, c_key_code) = (Key::Meta, Key::Other(8));
-    #[cfg(target_os = "windows")]
-    let (modifier_key, c_key_code) = (Key::Control, Key::Other(0x43)); // VK_C
-    #[cfg(target_os = "linux")]
-    let (modifier_key, c_key_code) = (Key::Control, Key::Unicode('c'));
 
     enigo
         .key(modifier_key, enigo::Direction::Press)

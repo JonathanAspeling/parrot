@@ -234,17 +234,17 @@ pub fn create_speaking_overlay(app_handle: &AppHandle) {
     }
 
     match builder.build() {
+        #[cfg(target_os = "linux")]
         Ok(window) => {
-            #[cfg(target_os = "linux")]
-            {
-                // Try to initialize GTK layer shell, ignore errors if compositor doesn't support it
-                if init_gtk_layer_shell(&window) {
-                    debug!("GTK layer shell initialized for overlay window");
-                } else {
-                    debug!("GTK layer shell not available, falling back to regular window");
-                }
+            if init_gtk_layer_shell(&window) {
+                debug!("GTK layer shell initialized for overlay window");
+            } else {
+                debug!("GTK layer shell not available, falling back to regular window");
             }
-
+            debug!("Speaking overlay window created successfully (hidden)");
+        }
+        #[cfg(not(target_os = "linux"))]
+        Ok(_) => {
             debug!("Speaking overlay window created successfully (hidden)");
         }
         Err(e) => {

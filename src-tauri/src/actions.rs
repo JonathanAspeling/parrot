@@ -218,11 +218,6 @@ fn get_selected_text_with_fallback(app: &AppHandle) -> Option<String> {
 }
 
 #[cfg(not(target_os = "macos"))]
-fn get_selected_text() -> Option<String> {
-    None
-}
-
-#[cfg(not(target_os = "macos"))]
 fn get_selected_text_with_fallback(_app: &AppHandle) -> Option<String> {
     None
 }

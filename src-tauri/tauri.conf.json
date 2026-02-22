@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Parrot",
-  "version": "2026.2.1",
+  "version": "26.2.1",
   "identifier": "com.rishiskhare.parrot",
   "build": {
     "beforeDevCommand": "bun run dev",
@@ -52,7 +52,6 @@
       "files": {},
       "hardenedRuntime": true,
       "minimumSystemVersion": "10.13",
-      "signingIdentity": "-",
       "entitlements": "Entitlements.plist"
     },
     "linux": {
@@ -73,7 +72,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJBQjcyMDk1MjA2NjAxRjkKUldUNUFXWWdsU0MzdXRRZi8zYzhqV2FaNUVDbDd2Rk5VM1IvWWowVXdmRFNKQ1BrMXF5RFFsLy8K",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDcxNjc2RDZGNEFGMTUzQjAKUldTd1UvRktiMjFuY1FFYU5xc2M1MXFMZDdXcTdXTEI0ckltcUNnYVdjeVhpVjhmQmlrUk55T0IK",
       "endpoints": [
         "https://github.com/rishiskhare/parrot/releases/latest/download/latest.json"
       ]

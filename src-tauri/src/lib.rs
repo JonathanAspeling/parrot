@@ -16,7 +16,6 @@ mod tray_i18n;
 mod utils;
 
 pub use cli::CliArgs;
-use specta_typescript::{BigIntExportBehavior, Typescript};
 use tauri_specta::{collect_commands, Builder};
 
 use env_filter::Builder as EnvFilterBuilder;
@@ -317,12 +316,13 @@ pub fn run(cli_args: CliArgs) {
     #[cfg(debug_assertions)] // <- Only export on non-release builds
     specta_builder
         .export(
-            Typescript::default().bigint(BigIntExportBehavior::Number),
+            specta_typescript::Typescript::default()
+                .bigint(specta_typescript::BigIntExportBehavior::Number),
             "../src/bindings.ts",
         )
         .expect("Failed to export typescript bindings");
 
-    let mut builder = tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(
             LogBuilder::new()
@@ -349,9 +349,7 @@ pub fn run(cli_args: CliArgs) {
         );
 
     #[cfg(target_os = "macos")]
-    {
-        builder = builder.plugin(tauri_nspanel::init());
-    }
+    let builder = builder.plugin(tauri_nspanel::init());
 
     builder
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {

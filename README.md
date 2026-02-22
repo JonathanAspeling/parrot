@@ -14,7 +14,7 @@
 
   ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
   ![License](https://img.shields.io/badge/license-MIT-green)
-  ![Version](https://img.shields.io/badge/version-2026.2.1-blue)
+  ![Version](https://img.shields.io/badge/version-26.2.1-blue)
 </div>
 
 ---
