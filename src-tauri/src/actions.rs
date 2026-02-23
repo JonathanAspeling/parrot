@@ -6,7 +6,6 @@ use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager};
-#[cfg(target_os = "macos")]
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
 const SHORTCUT_SETTLE_DELAY_MS: u64 = 40;
@@ -218,8 +217,46 @@ fn get_selected_text_with_fallback(app: &AppHandle) -> Option<String> {
 }
 
 #[cfg(not(target_os = "macos"))]
-fn get_selected_text_with_fallback(_app: &AppHandle) -> Option<String> {
-    None
+fn get_selected_text_with_fallback(app: &AppHandle) -> Option<String> {
+    let clipboard = app.clipboard();
+    let previous_clipboard = clipboard.read_text().ok();
+    let restore_clipboard = |value: Option<String>| {
+        let restore_value = value.unwrap_or_default();
+        let _ = clipboard.write_text(restore_value);
+    };
+
+    // Use a sentinel so we can reliably tell whether copy actually produced text.
+    let sentinel = format!(
+        "__PARROT_SELECTION_PROBE_{}__",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()
+            .map(|d| d.as_millis())
+            .unwrap_or_default()
+    );
+    let _ = clipboard.write_text(&sentinel);
+
+    {
+        use crate::input::{send_copy_ctrl_c, EnigoState};
+        let enigo_state = app.try_state::<EnigoState>()?;
+        let mut enigo = enigo_state.0.lock().ok()?;
+        if send_copy_ctrl_c(&mut enigo).is_err() {
+            restore_clipboard(previous_clipboard);
+            return None;
+        }
+    }
+
+    std::thread::sleep(std::time::Duration::from_millis(120));
+    let copied_text = clipboard.read_text().ok();
+
+    restore_clipboard(previous_clipboard);
+
+    let copied = copied_text?.trim().to_string();
+    if copied.is_empty() || copied == sentinel {
+        None
+    } else {
+        Some(copied)
+    }
 }
 
 impl ShortcutAction for SpeakAction {

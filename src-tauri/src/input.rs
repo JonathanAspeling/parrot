@@ -1,6 +1,4 @@
-use enigo::{Enigo, Mouse, Settings};
-#[cfg(target_os = "macos")]
-use enigo::{Key, Keyboard};
+use enigo::{Enigo, Key, Keyboard, Mouse, Settings};
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
 
@@ -24,8 +22,9 @@ pub fn get_cursor_position(app_handle: &AppHandle) -> Option<(i32, i32)> {
     enigo.location().ok()
 }
 
-/// Sends a Cmd+C copy command using macOS virtual key codes.
-/// This is used as a fallback when the Accessibility API cannot read the selection.
+/// Sends a copy command using platform-appropriate key combinations.
+/// macOS: Cmd+C (Meta + virtual key code 8)
+/// Windows/Linux: Ctrl+C
 #[cfg(target_os = "macos")]
 pub fn send_copy_ctrl_c(enigo: &mut Enigo) -> Result<(), String> {
     let (modifier_key, c_key_code) = (Key::Meta, Key::Other(8));
@@ -42,6 +41,24 @@ pub fn send_copy_ctrl_c(enigo: &mut Enigo) -> Result<(), String> {
     enigo
         .key(modifier_key, enigo::Direction::Release)
         .map_err(|e| format!("Failed to release copy modifier key: {}", e))?;
+
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn send_copy_ctrl_c(enigo: &mut Enigo) -> Result<(), String> {
+    enigo
+        .key(Key::Control, enigo::Direction::Press)
+        .map_err(|e| format!("Failed to press Ctrl key: {}", e))?;
+    enigo
+        .key(Key::Unicode('c'), enigo::Direction::Click)
+        .map_err(|e| format!("Failed to click C key: {}", e))?;
+
+    std::thread::sleep(std::time::Duration::from_millis(50));
+
+    enigo
+        .key(Key::Control, enigo::Direction::Release)
+        .map_err(|e| format!("Failed to release Ctrl key: {}", e))?;
 
     Ok(())
 }
