@@ -37,9 +37,14 @@ tauri_panel! {
     })
 }
 
-// Window dimensions must accommodate the widest overlay state (speaking controls with text).
+// Overlay width is constant across states (the CSS content transitions within it).
 const OVERLAY_WIDTH: f64 = 572.0;
-const OVERLAY_HEIGHT: f64 = 148.0;
+
+// Per-state heights keep the window tightly fitted to the visible content,
+// matching the Handy pattern where the window IS the overlay.
+// Each height = CSS content height + 10px top padding for close-button overflow.
+const PROCESSING_HEIGHT: f64 = 46.0;
+const SPEAKING_HEIGHT: f64 = 114.0;
 
 #[cfg(target_os = "macos")]
 const OVERLAY_TOP_OFFSET: f64 = 46.0;
@@ -51,6 +56,14 @@ const OVERLAY_BOTTOM_OFFSET: f64 = 15.0;
 
 #[cfg(any(target_os = "windows", target_os = "linux"))]
 const OVERLAY_BOTTOM_OFFSET: f64 = 40.0;
+
+/// Returns the window height for a given overlay state.
+fn height_for_state(state: &str) -> f64 {
+    match state {
+        "speaking" => SPEAKING_HEIGHT,
+        _ => PROCESSING_HEIGHT,
+    }
+}
 
 #[cfg(target_os = "linux")]
 fn update_gtk_layer_shell_anchors(overlay_window: &tauri::webview::WebviewWindow) {
@@ -178,22 +191,35 @@ fn is_mouse_within_monitor(
         && mouse_y < (monitor_y + monitor_height as i32)
 }
 
-fn calculate_overlay_position(app_handle: &AppHandle) -> Option<(f64, f64)> {
+fn calculate_overlay_position(
+    app_handle: &AppHandle,
+    overlay_width: f64,
+    overlay_height: f64,
+) -> Option<(f64, f64)> {
     if let Some(monitor) = get_monitor_with_cursor(app_handle) {
-        let work_area = monitor.work_area();
         let scale = monitor.scale_factor();
-        let work_area_width = work_area.size.width as f64 / scale;
-        let work_area_height = work_area.size.height as f64 / scale;
-        let work_area_x = work_area.position.x as f64 / scale;
-        let work_area_y = work_area.position.y as f64 / scale;
-
         let settings = settings::get_settings(app_handle);
 
-        let x = work_area_x + (work_area_width - OVERLAY_WIDTH) / 2.0;
+        // Use work area for horizontal centering (respects side docks).
+        let work_area = monitor.work_area();
+        let work_area_width = work_area.size.width as f64 / scale;
+        let work_area_x = work_area.position.x as f64 / scale;
+        let x = work_area_x + (work_area_width - overlay_width) / 2.0;
+
         let y = match settings.overlay_position {
-            OverlayPosition::Top => work_area_y + OVERLAY_TOP_OFFSET,
+            OverlayPosition::Top => {
+                // Top: position below the menu bar using work area.
+                let work_area_y = work_area.position.y as f64 / scale;
+                work_area_y + OVERLAY_TOP_OFFSET
+            }
             OverlayPosition::Bottom | OverlayPosition::None => {
-                work_area_y + work_area_height - OVERLAY_HEIGHT - OVERLAY_BOTTOM_OFFSET
+                // Bottom: position relative to the full screen edge so the
+                // overlay floats just above the screen bottom. The NSPanel
+                // (macOS) renders above the dock at PanelLevel::Status, and
+                // on other platforms always_on_top puts it above the taskbar.
+                let screen_height = monitor.size().height as f64 / scale;
+                let screen_y = monitor.position().y as f64 / scale;
+                screen_y + screen_height - overlay_height - OVERLAY_BOTTOM_OFFSET
             }
         };
 
@@ -202,10 +228,29 @@ fn calculate_overlay_position(app_handle: &AppHandle) -> Option<(f64, f64)> {
     None
 }
 
+/// Resizes the overlay window and repositions it so the anchored edge
+/// (bottom or top, depending on settings) stays in the correct place.
+fn resize_and_reposition(app_handle: &AppHandle, overlay_window: &tauri::webview::WebviewWindow, height: f64) {
+    let _ = overlay_window.set_size(tauri::Size::Logical(tauri::LogicalSize {
+        width: OVERLAY_WIDTH,
+        height,
+    }));
+
+    #[cfg(target_os = "linux")]
+    {
+        update_gtk_layer_shell_anchors(overlay_window);
+    }
+
+    if let Some((x, y)) = calculate_overlay_position(app_handle, OVERLAY_WIDTH, height) {
+        let _ = overlay_window
+            .set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y }));
+    }
+}
+
 /// Creates the speaking overlay window and keeps it hidden by default
 #[cfg(not(target_os = "macos"))]
 pub fn create_speaking_overlay(app_handle: &AppHandle) {
-    let position = calculate_overlay_position(app_handle);
+    let position = calculate_overlay_position(app_handle, OVERLAY_WIDTH, PROCESSING_HEIGHT);
 
     // On Linux (Wayland), monitor detection often fails, but we don't need exact coordinates
     // for Layer Shell as we use anchors. On other platforms, we require a position.
@@ -223,7 +268,7 @@ pub fn create_speaking_overlay(app_handle: &AppHandle) {
     .title("Speaking")
     .resizable(false)
     .focusable(false)
-    .inner_size(OVERLAY_WIDTH, OVERLAY_HEIGHT)
+    .inner_size(OVERLAY_WIDTH, PROCESSING_HEIGHT)
     .shadow(false)
     .maximizable(false)
     .minimizable(false)
@@ -263,7 +308,7 @@ pub fn create_speaking_overlay(app_handle: &AppHandle) {
 /// Creates the speaking overlay panel and keeps it hidden by default (macOS)
 #[cfg(target_os = "macos")]
 pub fn create_speaking_overlay(app_handle: &AppHandle) {
-    if let Some((x, y)) = calculate_overlay_position(app_handle) {
+    if let Some((x, y)) = calculate_overlay_position(app_handle, OVERLAY_WIDTH, PROCESSING_HEIGHT) {
         // PanelBuilder creates a Tauri window then converts it to NSPanel.
         // The window remains registered, so get_webview_window() still works.
         match PanelBuilder::<_, SpeakingOverlayPanel>::new(app_handle, "speaking_overlay")
@@ -273,7 +318,7 @@ pub fn create_speaking_overlay(app_handle: &AppHandle) {
             .level(PanelLevel::Status)
             .size(tauri::Size::Logical(tauri::LogicalSize {
                 width: OVERLAY_WIDTH,
-                height: OVERLAY_HEIGHT,
+                height: PROCESSING_HEIGHT,
             }))
             .has_shadow(false)
             .transparent(true)
@@ -304,9 +349,12 @@ fn show_overlay_state(app_handle: &AppHandle, state: &str, text: Option<String>)
         return;
     }
 
-    update_overlay_position(app_handle);
-
     if let Some(overlay_window) = app_handle.get_webview_window("speaking_overlay") {
+        // Resize the window to fit the current state and reposition so the
+        // anchored edge (bottom/top) stays at the correct screen location.
+        let height = height_for_state(state);
+        resize_and_reposition(app_handle, &overlay_window, height);
+
         let _ = overlay_window.show();
 
         // On Windows, aggressively re-assert "topmost" in the native Z-order after showing
@@ -332,6 +380,7 @@ pub fn show_processing_overlay(app_handle: &AppHandle) {
 }
 
 /// Updates the overlay window position based on current settings.
+/// Queries the current window size so the position matches the active state.
 pub fn update_overlay_position(app_handle: &AppHandle) {
     if let Some(overlay_window) = app_handle.get_webview_window("speaking_overlay") {
         #[cfg(target_os = "linux")]
@@ -339,10 +388,35 @@ pub fn update_overlay_position(app_handle: &AppHandle) {
             update_gtk_layer_shell_anchors(&overlay_window);
         }
 
-        if let Some((x, y)) = calculate_overlay_position(app_handle) {
+        // Use the window's actual size so the position calculation stays
+        // consistent with whatever state the overlay is currently in.
+        let current_height = overlay_window
+            .inner_size()
+            .ok()
+            .map(|s| {
+                let scale = overlay_window.scale_factor().unwrap_or(1.0);
+                s.height as f64 / scale
+            })
+            .unwrap_or(PROCESSING_HEIGHT);
+
+        if let Some((x, y)) =
+            calculate_overlay_position(app_handle, OVERLAY_WIDTH, current_height)
+        {
             let _ = overlay_window
                 .set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y }));
         }
+    }
+}
+
+/// Resizes the overlay window to fit the given content height (in logical
+/// pixels, as measured by the frontend's ResizeObserver) plus the #root
+/// padding. Called by the frontend whenever the rendered content size changes.
+pub fn resize_overlay_to_content(app_handle: &AppHandle, content_height: f64) {
+    // Add the 10px top padding that #root uses for close-button overflow.
+    let window_height = content_height + 10.0;
+
+    if let Some(overlay_window) = app_handle.get_webview_window("speaking_overlay") {
+        resize_and_reposition(app_handle, &overlay_window, window_height);
     }
 }
 

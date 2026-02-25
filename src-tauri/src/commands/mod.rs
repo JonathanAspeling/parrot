@@ -250,6 +250,13 @@ pub fn preload_tts_model(tts_manager: State<'_, Arc<TTSManager>>) {
     tts_manager.initiate_model_load();
 }
 
+/// Resizes the overlay window to match the frontend's rendered content height.
+#[specta::specta]
+#[tauri::command]
+pub fn resize_overlay(app: AppHandle, content_height: f64) {
+    crate::overlay::resize_overlay_to_content(&app, content_height);
+}
+
 #[specta::specta]
 #[tauri::command]
 pub fn toggle_tts_pause(tts_manager: State<'_, Arc<TTSManager>>) -> Result<bool, String> {

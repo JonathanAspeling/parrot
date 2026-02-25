@@ -30,7 +30,32 @@ const SpeakingOverlay: React.FC = () => {
   // from the previous state's dimensions.
   const [noTransition, setNoTransition] = useState(true);
   const wasVisibleRef = useRef(false);
+  const overlayRef = useRef<HTMLDivElement>(null);
   const direction = getLanguageDirection(i18n.language);
+
+  // Observe the overlay element's rendered height and tell the backend to
+  // resize the native window to match. This keeps the window tightly fitted
+  // to the CSS content (which uses height: auto) so the bottom edge stays
+  // anchored correctly regardless of text length.
+  const lastReportedHeightRef = useRef(0);
+  useEffect(() => {
+    const el = overlayRef.current;
+    if (!el) return;
+
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const height = entry.borderBoxSize?.[0]?.blockSize ?? entry.contentRect.height;
+        // Skip zero-height (unmounted) and sub-pixel noise to avoid
+        // redundant IPC calls during CSS transitions.
+        if (height > 0 && Math.abs(height - lastReportedHeightRef.current) >= 1) {
+          lastReportedHeightRef.current = height;
+          commands.resizeOverlay(height);
+        }
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   useEffect(() => {
     const setupEventListeners = async () => {
@@ -117,6 +142,7 @@ const SpeakingOverlay: React.FC = () => {
 
   return (
     <div
+      ref={overlayRef}
       dir={direction}
       className={`speaking-overlay ${state}-state ${isVisible ? "fade-in" : ""} ${speakingPaused ? "paused" : ""} ${noTransition ? "no-transition" : ""}`}
     >

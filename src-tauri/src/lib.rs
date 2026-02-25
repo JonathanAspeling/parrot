@@ -342,6 +342,7 @@ pub fn run(cli_args: CliArgs) {
         commands::get_model_status,
         commands::preload_tts_model,
         commands::toggle_tts_pause,
+        commands::resize_overlay,
         commands::audio::get_available_output_devices,
         commands::audio::set_selected_output_device,
         commands::audio::get_selected_output_device,
