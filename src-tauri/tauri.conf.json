@@ -70,11 +70,5 @@
     },
     "windows": {}
   },
-  "plugins": {
-    "updater": {
-      "endpoints": [
-        "https://github.com/rishiskhare/parrot/releases/latest/download/latest.json"
-      ]
-    }
-  }
+  "plugins": {}
 }
