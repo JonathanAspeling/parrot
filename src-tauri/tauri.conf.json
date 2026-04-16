@@ -72,7 +72,6 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDcxNjc2RDZGNEFGMTUzQjAKUldTd1UvRktiMjFuY1FFYU5xc2M1MXFMZDdXcTdXTEI0ckltcUNnYVdjeVhpVjhmQmlrUk55T0IK",
       "endpoints": [
         "https://github.com/rishiskhare/parrot/releases/latest/download/latest.json"
       ]
