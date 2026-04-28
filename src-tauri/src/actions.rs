@@ -196,8 +196,83 @@ fn get_selected_text_with_fallback(app: &AppHandle) -> Option<String> {
     }
 }
 
+/// Read the currently selected text using the Windows UI Automation API.
+/// Does not touch the clipboard or inject keystrokes. Returns `None` when
+/// nothing is selected, no element is focused, or UIA is unavailable.
+#[cfg(target_os = "windows")]
+fn get_selected_text_via_uia() -> Option<String> {
+    use windows::core::{Interface, BSTR};
+    use windows::Win32::System::Com::{
+        CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER,
+        COINIT_MULTITHREADED,
+    };
+    use windows::Win32::UI::Accessibility::{
+        CUIAutomation, IUIAutomation, IUIAutomationTextPattern, UIA_TextPatternId,
+    };
+
+    unsafe {
+        // CoInitializeEx returns S_FALSE (already initialised) or S_OK; both are fine.
+        let hr = CoInitializeEx(None, COINIT_MULTITHREADED);
+        let co_initialised = hr.is_ok();
+
+        let result = (|| -> Option<String> {
+            let automation: IUIAutomation =
+                CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER).ok()?;
+
+            let focused = automation.GetFocusedElement().ok()?;
+
+            let pattern = focused
+                .GetCurrentPattern(UIA_TextPatternId)
+                .ok()?;
+            let text_pattern = pattern.cast::<IUIAutomationTextPattern>().ok()?;
+
+            let ranges = text_pattern.GetSelection().ok()?;
+            let count = ranges.Length().ok()?;
+            if count == 0 {
+                return None;
+            }
+
+            let mut combined = String::new();
+            for i in 0..count {
+                let range = ranges.GetElement(i).ok()?;
+                // -1 = no length limit
+                let bstr: BSTR = range.GetText(-1).ok()?;
+                let chunk = bstr.to_string();
+                if !chunk.is_empty() {
+                    if !combined.is_empty() {
+                        combined.push('\n');
+                    }
+                    combined.push_str(&chunk);
+                }
+            }
+
+            let trimmed = combined.trim().to_string();
+            if trimmed.is_empty() { None } else { Some(trimmed) }
+        })();
+
+        if co_initialised {
+            CoUninitialize();
+        }
+
+        result
+    }
+}
+
 #[cfg(not(target_os = "macos"))]
 fn get_selected_text_with_fallback(app: &AppHandle) -> Option<String> {
+    // Try Windows UI Automation first — works for Notepad, Win32 apps, terminals,
+    // and most modern apps without touching the clipboard or injecting keystrokes.
+    #[cfg(target_os = "windows")]
+    for delay_ms in [0_u64, 40, 90] {
+        if delay_ms > 0 {
+            std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+        }
+        if let Some(text) = get_selected_text_via_uia() {
+            return Some(text);
+        }
+    }
+
+    // Fallback: simulate Ctrl+C and read the clipboard.
     let clipboard = app.clipboard();
     let previous_clipboard = clipboard.read_text().ok();
     let restore_clipboard = |value: Option<String>| {
@@ -247,7 +322,6 @@ impl ShortcutAction for SpeakAction {
         };
 
         speech.initiate_model_load();
-        show_processing_overlay(app);
         let app_handle = app.clone();
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(SHORTCUT_SETTLE_DELAY_MS));
@@ -257,6 +331,11 @@ impl ShortcutAction for SpeakAction {
                     if !speech.is_request_active(request_id) {
                         return;
                     }
+                    // Show overlay only after grabbing text — showing it before
+                    // the copy causes WM_ACTIVATE to steal focus from the source
+                    // app on Windows, so the injected Ctrl+C lands in the overlay
+                    // instead of the text the user had selected.
+                    show_processing_overlay(&app_handle);
                     debug!("Speaking {} chars via TTS", text.len());
                     speech.speak(text, request_id);
                 }

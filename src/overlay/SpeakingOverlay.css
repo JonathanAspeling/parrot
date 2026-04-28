@@ -1,5 +1,6 @@
 .speaking-overlay {
-  height: 36px;
+  height: auto;
+  min-height: 36px;
   width: 172px;
   margin: 0 auto;
   position: relative;
@@ -89,9 +90,12 @@
 
 .overlay-middle {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
   justify-content: center;
+  gap: 5px;
   min-width: 0;
+  padding: 4px 0;
 }
 
 .status-text {
@@ -112,6 +116,56 @@
   50% {
     opacity: 1;
   }
+}
+
+/* ── Synthesis progress bar (processing state, multi-chunk only) ── */
+.synth-progress {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.synth-progress-bar-track {
+  flex: 1;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+  position: relative;
+}
+
+.synth-progress-bar {
+  height: 100%;
+  border-radius: 2px;
+  background: rgba(155, 232, 112, 0.75);
+  transition: width 150ms ease-out;
+}
+
+.synth-progress-bar.indeterminate {
+  position: absolute;
+  width: 35%;
+  transition: none;
+  animation: indeterminate-slide 1.3s ease-in-out infinite;
+}
+
+@keyframes indeterminate-slide {
+  0%   { left: -35%; }
+  100% { left: 105%; }
+}
+
+.speaking-synth-progress {
+  margin-top: 6px;
+  padding: 0 4px;
+}
+
+.synth-progress-label {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.45);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 /* ── Speaking state (outer container dimensions) ── */

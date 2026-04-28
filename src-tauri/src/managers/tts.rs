@@ -41,6 +41,12 @@ pub struct ModelStateEvent {
     pub error: Option<String>,
 }
 
+#[derive(Clone, Serialize)]
+struct TtsSynthesisProgress {
+    done: usize,
+    total: usize,
+}
+
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum TtsLifecycleState {
@@ -914,6 +920,13 @@ impl TTSManager {
                     );
 
                     next_chunk_to_append += 1;
+                    let _ = app_handle.emit(
+                        "tts-synthesis-progress",
+                        TtsSynthesisProgress {
+                            done: next_chunk_to_append,
+                            total: total_chunks,
+                        },
+                    );
                 }
             }
 

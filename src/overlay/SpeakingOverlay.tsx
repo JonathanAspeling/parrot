@@ -23,6 +23,7 @@ const SpeakingOverlay: React.FC = () => {
   const [isTogglingPause, setIsTogglingPause] = useState(false);
   const [showCloseButton, setShowCloseButton] = useState<boolean>(true);
   const [spokenText, setSpokenText] = useState<string>("");
+  const [synthProgress, setSynthProgress] = useState<{ done: number; total: number } | null>(null);
   // Suppresses size transitions when the overlay reappears after being
   // hidden, so it snaps to the correct size instantly instead of animating
   // from the previous state's dimensions.
@@ -78,6 +79,7 @@ const SpeakingOverlay: React.FC = () => {
           setSpokenText("");
           setSpeakingPaused(false);
           setIsTogglingPause(false);
+          setSynthProgress(null);
         }
 
         setState(payload.state);
@@ -112,11 +114,17 @@ const SpeakingOverlay: React.FC = () => {
         },
       );
 
+      const unlistenSynthProgress = await listen<{ done: number; total: number }>(
+        "tts-synthesis-progress",
+        (event) => setSynthProgress(event.payload),
+      );
+
       return () => {
         unlistenShow();
         unlistenHide();
         unlistenText();
         unlistenPauseState();
+        unlistenSynthProgress();
       };
     };
 
@@ -171,6 +179,22 @@ const SpeakingOverlay: React.FC = () => {
           <div className="status-text">
             {t("overlay.processing", { defaultValue: "Processing..." })}
           </div>
+          {/* Always show a bar: indeterminate until first chunk done, then determinate */}
+          <div className="synth-progress">
+            <div className="synth-progress-bar-track">
+              <div
+                className={`synth-progress-bar${!synthProgress || synthProgress.total <= 1 ? " indeterminate" : ""}`}
+                style={synthProgress && synthProgress.total > 1 ? {
+                  width: `${(synthProgress.done / synthProgress.total) * 100}%`,
+                } : undefined}
+              />
+            </div>
+            {synthProgress && synthProgress.total > 1 && (
+              <span className="synth-progress-label">
+                {synthProgress.done} / {synthProgress.total}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -204,6 +228,20 @@ const SpeakingOverlay: React.FC = () => {
               )}
             </button>
           </div>
+          {/* Show remaining-chunk progress while background synthesis is still running */}
+          {synthProgress && synthProgress.total > 1 && synthProgress.done < synthProgress.total && (
+            <div className="synth-progress speaking-synth-progress">
+              <div className="synth-progress-bar-track">
+                <div
+                  className="synth-progress-bar"
+                  style={{ width: `${(synthProgress.done / synthProgress.total) * 100}%` }}
+                />
+              </div>
+              <span className="synth-progress-label">
+                {synthProgress.done} / {synthProgress.total}
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </div>

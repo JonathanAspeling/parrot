@@ -43,7 +43,9 @@ const OVERLAY_WIDTH: f64 = 572.0;
 // Per-state heights keep the window tightly fitted to the visible content,
 // matching the Handy pattern where the window IS the overlay.
 // Each height = CSS content height + 10px top padding for close-button overflow.
-const PROCESSING_HEIGHT: f64 = 46.0;
+// Tall enough to accommodate the progress bar row when visible; the
+// ResizeObserver in the frontend corrects to exact content height once rendered.
+const PROCESSING_HEIGHT: f64 = 64.0;
 const SPEAKING_HEIGHT: f64 = 114.0;
 
 #[cfg(target_os = "macos")]
@@ -191,35 +193,37 @@ fn is_mouse_within_monitor(
         && mouse_y < (monitor_y + monitor_height as i32)
 }
 
+// Returns physical pixel coordinates to avoid cross-monitor DPI conversion
+// errors on Windows (set_position(Logical) uses the window's *current* monitor
+// scale, which is wrong when the overlay moves to a monitor with different DPI).
 fn calculate_overlay_position(
     app_handle: &AppHandle,
     overlay_width: f64,
     overlay_height: f64,
-) -> Option<(f64, f64)> {
+) -> Option<(i32, i32)> {
     if let Some(monitor) = get_monitor_with_cursor(app_handle) {
         let scale = monitor.scale_factor();
+        let overlay_w = (overlay_width * scale) as i32;
+        let overlay_h = (overlay_height * scale) as i32;
         let settings = settings::get_settings(app_handle);
 
         // Use work area for horizontal centering (respects side docks).
         let work_area = monitor.work_area();
-        let work_area_width = work_area.size.width as f64 / scale;
-        let work_area_x = work_area.position.x as f64 / scale;
-        let x = work_area_x + (work_area_width - overlay_width) / 2.0;
+        let x = work_area.position.x + (work_area.size.width as i32 - overlay_w) / 2;
 
         let y = match settings.overlay_position {
             OverlayPosition::Top => {
-                // Top: position below the menu bar using work area.
-                let work_area_y = work_area.position.y as f64 / scale;
-                work_area_y + OVERLAY_TOP_OFFSET
+                work_area.position.y + (OVERLAY_TOP_OFFSET * scale) as i32
             }
             OverlayPosition::Bottom | OverlayPosition::None => {
                 // Bottom: position relative to the full screen edge so the
                 // overlay floats just above the screen bottom. The NSPanel
                 // (macOS) renders above the dock at PanelLevel::Status, and
                 // on other platforms always_on_top puts it above the taskbar.
-                let screen_height = monitor.size().height as f64 / scale;
-                let screen_y = monitor.position().y as f64 / scale;
-                screen_y + screen_height - overlay_height - OVERLAY_BOTTOM_OFFSET
+                monitor.position().y
+                    + monitor.size().height as i32
+                    - overlay_h
+                    - (OVERLAY_BOTTOM_OFFSET * scale) as i32
             }
         };
 
@@ -246,8 +250,8 @@ fn resize_and_reposition(
     }
 
     if let Some((x, y)) = calculate_overlay_position(app_handle, OVERLAY_WIDTH, height) {
-        let _ =
-            overlay_window.set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y }));
+        let _ = overlay_window
+            .set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
     }
 }
 
@@ -286,7 +290,9 @@ pub fn create_speaking_overlay(app_handle: &AppHandle) {
     .visible(false);
 
     if let Some((x, y)) = position {
-        builder = builder.position(x, y);
+        // Builder takes logical pixels; the physical value is close enough for
+        // the hidden startup position. resize_and_reposition corrects it before show.
+        builder = builder.position(x as f64, y as f64);
     }
 
     match builder.build() {
@@ -406,7 +412,7 @@ pub fn update_overlay_position(app_handle: &AppHandle) {
         if let Some((x, y)) = calculate_overlay_position(app_handle, OVERLAY_WIDTH, current_height)
         {
             let _ = overlay_window
-                .set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y }));
+                .set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
         }
     }
 }
